@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <title>Document</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+            box-sizing: border-box;
+            overflow: hidden;
+            cursor: pointer;
+            z-index: 0;
+        }
+
+        #map-click {
+            position: absolute;
+            top: 30px;
+            left: 60px;
+            border: none;
+            outline: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            box-sizing: border-box;
+            transition: all 200ms;
+            box-shadow: #333 4px 4px 8px;
+            background-color: red;
+            color: yellow;
+            font-size: 1.2em;
+            font-family: 'Courier New', Courier, monospace;
+            z-index: 100;
+        }
+
+        #map-click:active {
+            box-shadow: #e0dcdc 2px 2px 4px;
+            background-color: green;
+        }
+
+        #download {
+            position: absolute;
+            width: 70px;
+            height: 50px;
+            top: 10px;
+            right: 10px;
+            z-index: 100;
+            display: none;
+        }
+
+        #clear {
+            position: absolute;
+            width: 70px;
+            height: 50px;
+            top: 60px;
+            right: 10px;
+            z-index: 100;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <button id="map-click">mark</button>
+    <button id="download">下载</button>
+    <button id="clear">清除标注</button>
+
+
+    <script>
+        var map = L.map('map').setView([34.063380, 108.951128], 13)
+        var clickBtn = document.querySelector('#map-click')
+        var downloadBtn = document.querySelector('#download')
+        var clearBtn = document.querySelector('#clear')
+        // 存储构建的geojson数据
+        var markersInfo = [];
+
+        // 增加OSM底图
+        L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // 设置标注图标
+        var myIcon = L.icon({
+            iconUrl: '../assit/marker.png',
+            iconSize: [20, 30], // 尺寸
+            iconAnchor: [10, 15] // 图标左上角相对于标记点的偏移，这里图标大小为[20,30]，则为了保证中央，我们要往左偏移10，向上偏移15；
+        });
+
+        // 创建图层组，本质也是一个数组对象
+        var markers = L.layerGroup().addTo(map);
+
+        // 创建地图点击事件
+        function onMapClick(e) {
+            var marker = L.marker(e.latlng, { icon: myIcon, draggable: true }).addTo(markers);
+            var popupContent = document.createElement('div');
+
+            var nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.placeholder = '名称';
+
+            var descInput = document.createElement('input');
+            descInput.type = 'text';
+            descInput.placeholder = '描述';
+
+            var saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.textContent = '保存';
+
+            popupContent.appendChild(nameInput);
+            popupContent.appendChild(document.createElement('br'));
+            popupContent.appendChild(descInput);
+            popupContent.appendChild(document.createElement('br'));
+            popupContent.appendChild(saveBtn);
+
+            marker.bindPopup(popupContent);
+
+            marker.on('popupopen', function () {
+                downloadBtn.style.display = 'block'
+                clearBtn.style.display = 'block'
+                L.DomEvent.on(saveBtn, 'click', function () {
+                    saveMarkerInfo(marker, nameInput, descInput);
+                });
+            });
+
+            function saveMarkerInfo(marker, nameInput, descInput) {
+                marker.options.title = nameInput.value;
+                marker.setPopupContent(descInput.value);
+                console.log(123);
+
+                var markerInfo = {
+                    title: marker.options.title,
+                    desc: marker.getPopup().getContent(),
+                    latlng: marker.getLatLng()
+                };
+                markersInfo.push(markerInfo);
+                console.log(markersInfo);
+
+            }
+
+            marker.openPopup();
+        }
+        // 标注点击事件
+        function onMarkerContextMenu(e) {
+            var marker = e.target;
+            var popupContent = '<form>' +
+                '名称: <input id="name" type="text" value="' + marker.options.title + '" />' +
+                '<br />描述: <input id="desc" type="text" value="' + marker.getPopup().getContent() + '" />' +
+                '<br /><button id="save" type = "button">保存</button>' +
+                '</form>';
+
+
+            marker.bindPopup(popupContent).openPopup();
+
+            L.DomEvent.on(marker, 'popupopen', function () {
+                L.DomEvent.on('#save', 'click', function (event) {
+                    marker.options.title = L.DomUtil.get('name').value;
+                    marker.bindPopup(L.DomUtil.get('desc').value);
+                    downloadBtn.style.display = "black"
+                });
+            });
+        }
+
+        // 标注切换点击事件
+        flag = false
+        clickBtn.addEventListener('click', () => {
+            flag = !flag
+            if (flag) {
+                map.on('click', onMapClick);
+            } else {
+                map.off('click', onMapClick)
+            }
+        })
+        markers.on('contextmenu', onMarkerContextMenu);
+
+        // 监听下载按钮的点击事件
+        downloadBtn.addEventListener('click', function () {
+            // 构建 geojson 数据
+            var geojsonData = {
+                type: "FeatureCollection",
+                features: []
+            };
+            // 遍历markersInfo 然后存储元素信息到geojson
+            markersInfo.forEach(function (markerInfo) {
+                // 构建geojson元素
+                var feature = {
+                    type: "Feature",
+                    properties: {
+                        name: markerInfo.title,
+                        desc: markerInfo.desc
+                    },
+                    geometry: {
+                        type: "Point",
+                        coordinates: [markerInfo.latlng.lng, markerInfo.latlng.lat]
+                    }
+                };
+                // 保存到features属性中
+                geojsonData.features.push(feature);
+            });
+
+
+            // 将 geojsonData 序列化为 JSON 字符串，并指定 MIME 类型为 'application/json'
+            var blob = new Blob([JSON.stringify(geojsonData)], { type: 'application/json' });
+            // 创建一个 blob URL，用于下载
+            var url = window.URL.createObjectURL(blob, { oneTimeOnly: true });
+            // 创建一个新的超链接元素
+            var a = document.createElement('a');
+            // 设置超链接的 href 属性为 blob URL
+            a.href = url;
+            // 设置超链接的 download 属性为 'markers.geojson'，表示下载的文件名为 'markers.geojson'
+            a.download = 'markers.geojson';
+            // 触发超链接的点击事件，开始下载
+            a.click();
+            window.URL.revokeObjectURL(url);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            // 移除 markers 图层组
+            // map.removeLayer(markers);
+            // 清空 markersInfo 数组
+            // markersInfo = [];
+            // 隐藏下载按钮
+            // downloadBtn.style.display = 'none';
+            // 重新创建一个空的图层组
+            // markers = L.layerGroup().addTo(map);
+            // 清空 markers 图层组
+            markers.clearLayers();
+            // 隐藏下载按钮
+            downloadBtn.style.display = 'none';
+            clearBtn.style.display = 'none';
+        })
+
+    </script>
+</body>
+
+</html>
