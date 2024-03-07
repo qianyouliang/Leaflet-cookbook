@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet 加载高德地图</title>
+    <script src="https://lib.baomitu.com/leaflet/1.9.2/leaflet.js"></script>
+    <link rel="stylesheet" href="https://lib.baomitu.com/leaflet/1.9.2/leaflet.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script>
+        //定义一些常量
+        const PI = 3.1415926535897932384626;
+        const a = 6378245.0;  //长半轴
+        const ee = 0.00669342162296594323; //扁率
+
+        /**
+         * GCJ02 转换为 WGS84
+         * @param lng
+         * @param lat
+         * @returns {*[]}
+         */
+        function gcj02towgs84 (lng, lat) {
+          lat = +lat
+          lng = +lng
+          if (out_of_china(lng, lat)) {
+            return [lng, lat]
+          } else {
+            let dlat = transformlat(lng - 105.0, lat - 35.0)
+            let dlng = transformlng(lng - 105.0, lat - 35.0)
+            let radlat = lat / 180.0 * PI
+            let magic = Math.sin(radlat)
+            magic = 1 - ee * magic * magic
+            let sqrtmagic = Math.sqrt(magic)
+            dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * PI)
+            dlng = (dlng * 180.0) / (a / sqrtmagic * Math.cos(radlat) * PI)
+            let mglat = lat + dlat
+            let mglng = lng + dlng
+            return [lng * 2 - mglng, lat * 2 - mglat]
+          }
+        }
+
+        /**
+         * 判断是否在国内，不在国内则不做偏移
+         * @param lng
+         * @param lat
+         * @returns {boolean}
+         */
+        function out_of_china (lng, lat) {
+          lat = +lat
+          lng = +lng
+          // 纬度3.86~53.55,经度73.66~135.05
+          return !(lng > 73.66 && lng < 135.05 && lat > 3.86 && lat < 53.55)
+        }
+
+        function transformlat (lng, lat) {
+          lat = +lat
+          lng = +lng
+          let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng))
+          ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0
+          ret += (20.0 * Math.sin(lat * PI) + 40.0 * Math.sin(lat / 3.0 * PI)) * 2.0 / 3.0
+          ret += (160.0 * Math.sin(lat / 12.0 * PI) + 320 * Math.sin(lat * PI / 30.0)) * 2.0 / 3.0
+          return ret
+        }
+
+        function transformlng (lng, lat) {
+          lat = +lat
+          lng = +lng
+          let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng))
+          ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0
+          ret += (20.0 * Math.sin(lng * PI) + 40.0 * Math.sin(lng / 3.0 * PI)) * 2.0 / 3.0
+          ret += (150.0 * Math.sin(lng / 12.0 * PI) + 300.0 * Math.sin(lng / 30.0 * PI)) * 2.0 / 3.0
+          return ret
+        }
+
+        var map = L.map("map").setView([31.5, 121.5], 10);
+        //使用高德的WMS服务
+        // var layer = L.tileLayer('http://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        //     subdomains: ['1', '2', '3', '4'],
+        //     minZoom: 1,
+        //     maxZoom: 19
+        // })
+        //使用高德的影像地图服务
+        var layer = L.tileLayer('http://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}', {
+            subdomains: ['1', '2', '3', '4'],
+            minZoom: 1,
+            maxZoom: 19
+        })
+        map.addLayer(layer);
+        map.on("click", (evt) => {
+            console.log("高德坐标：",evt.latlng.lat,evt.latlng.lng);
+            let coords = gcj02towgs84(evt.latlng.lng, evt.latlng.lat);
+            console.log("wgs-84坐标:",coords[1],coords[0]);
+            map.flyTo(evt.latlng, 13); //参数1是中心点经纬度，参数2是缩放级别
+        });
+    </script>
+</body>
+</html>
